@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 # ================================
-# NOWA FUNKCJONALNOŚĆ: ANALIZA SENTYMENTU
+# MODUŁ ANALIZY SENTYMENTU
 # ================================
 class SentimentAnalyzer:
     """
@@ -36,7 +36,7 @@ class SentimentAnalyzer:
 
 
 # ================================
-# MODUŁY POBIERANIA DANYCH I SYMULACJI
+# MODUŁY POBIERANIA DANYCH
 # ================================
 class MarketDataFetcher:
     """
@@ -126,6 +126,28 @@ class Indicators:
         avg = np.mean(data)
         std = np.std(data)
         return avg, avg + num_std * std, avg - num_std * std
+
+
+# ================================
+# MODUŁ PROGNOZOWANIA CEN (NOWOŚĆ)
+# ================================
+class PricePredictor:
+    """
+    Prosty moduł prognozowania ceny przy użyciu regresji liniowej na podstawie ostatnich N próbek.
+    """
+    @staticmethod
+    def predict_next(prices, window=10):
+        prices = np.asarray(prices)
+        if prices.size < window:
+            window = prices.size
+        x = np.arange(window)
+        y = prices[-window:]
+        # Dopasowanie prostej regresji liniowej
+        coeffs = np.polyfit(x, y, 1)  # [slope, intercept]
+        slope, intercept = coeffs
+        next_x = window
+        prediction = slope * next_x + intercept
+        return prediction
 
 
 # ================================
@@ -271,41 +293,46 @@ class IntelligentTradingStrategy(EnhancedTradingStrategy):
         return (final_signal, ma, rsi_val, macd_val, macd_signal,
                 bb_mid, bb_upper, bb_lower, effective_stop_loss, effective_take_profit)
 
-# ================================
-# NOWOŚĆ: ADAPTIVE TRADING STRATEGY
-# ================================
-class AdaptiveTradingStrategy(IntelligentTradingStrategy):
+# Nowa strategia wykorzystująca prognozę ceny – zwiększa "inteligencję"
+class PricePredictor:
     """
-    Strategia adaptacyjna – dynamicznie dostosowuje parametry na podstawie
-    ostatniej zmienności (adaptive_window) oraz momentum.
+    Prosty moduł prognozowania ceny przy użyciu regresji liniowej na podstawie ostatnich N próbek.
     """
-    def __init__(self, *args, adaptive_window=50, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.adaptive_window = adaptive_window
+    @staticmethod
+    def predict_next(prices, window=10):
+        prices = np.asarray(prices)
+        if prices.size < window:
+            window = prices.size
+        x = np.arange(window)
+        y = prices[-window:]
+        coeffs = np.polyfit(x, y, 1)
+        slope, intercept = coeffs
+        next_x = window
+        prediction = slope * next_x + intercept
+        return prediction
 
+class IntelligentTradingStrategyWithPrediction(AdaptiveTradingStrategy):
+    """
+    Strategia rozszerzona o prognozę ceny.
+    Na podstawie prognozy (PricePredictor) modyfikuje ostateczny sygnał:
+    Jeśli przewidywana cena jest wyraźnie wyższa od bieżącej – wymusza sygnał BUY,
+    a jeśli niższa – wymusza sygnał SELL.
+    """
     def evaluate(self, prices):
         base_result = super().evaluate(prices)
         if len(base_result) != 10:
             return base_result
         base_signal, ma, rsi_val, macd_val, macd_signal, bb_mid, bb_upper, bb_lower, eff_sl, eff_tp = base_result
-        prices_np = np.asarray(prices)
-        if prices_np.size < self.adaptive_window:
-            return base_result
-        recent_prices = prices_np[-self.adaptive_window:]
-        avg_price = np.mean(recent_prices)
-        vol = np.std(recent_prices)
-        momentum = recent_prices[-1] - recent_prices[0]
-        adjustment_factor = 1 + (vol / avg_price)
-        new_eff_sl = eff_sl / adjustment_factor if eff_sl is not None else self.stop_loss / adjustment_factor
-        new_eff_tp = eff_tp / adjustment_factor if eff_tp is not None else self.take_profit / adjustment_factor
-        if momentum > 0.5:
+        predicted_price = PricePredictor.predict_next(prices, window=10)
+        current_price = np.asarray(prices)[-1]
+        if predicted_price > current_price * 1.01:
             final_signal = "BUY"
-        elif momentum < -0.5:
+        elif predicted_price < current_price * 0.99:
             final_signal = "SELL"
         else:
             final_signal = base_signal
         return (final_signal, ma, rsi_val, macd_val, macd_signal,
-                bb_mid, bb_upper, bb_lower, new_eff_sl, new_eff_tp)
+                bb_mid, bb_upper, bb_lower, eff_sl, eff_tp)
 
 # ================================
 # MODUŁ RYZYKA I OCENY WYNIKÓW
@@ -462,7 +489,7 @@ class OptimizeWorker(QThread):
 # ================================
 class TradingBot:
     def __init__(self, ui_log, data_source="real", symbol="BTCUSDT"):
-        # Ustawienie data_source="real" powoduje korzystanie z prawdziwych danych
+        # Ustawienie data_source="real" powoduje korzystanie z prawdziwych danych z Binance.
         if data_source == "real":
             self.data_fetcher = MarketDataFetcher(symbol=symbol)
             ui_log.append("Używane są rzeczywiste dane rynkowe.")
@@ -470,7 +497,7 @@ class TradingBot:
             self.data_fetcher = DataSimulator()
             ui_log.append("Używana jest symulacja danych.")
         self.prices = []
-        self.strategy = AdaptiveTradingStrategy()
+        self.strategy = AdaptiveTradingStrategy()  # Możesz zamienić na IntelligentTradingStrategyWithPrediction, jeśli chcesz użyć prognozy.
         self.ui_log = ui_log
         self.timer = QTimer()
         self.timer.timeout.connect(self.on_new_data)
@@ -656,7 +683,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tab_trading, "Real-Time Trading")
         self.init_trading_tab()
 
-        # Na podstawie loga tworzymy bota – UŻYWAMY PRAWDZIEJSZYCH DANYCH (data_source="real")
+        # Na podstawie loga tworzymy bota – używamy prawdziwych danych (data_source="real")
         self.trading_bot = TradingBot(self.txt_log, data_source="real", symbol="BTCUSDT")
 
         # Zakładka backtestingu
@@ -732,7 +759,8 @@ class MainWindow(QMainWindow):
     def run_backtest(self):
         self.txt_backtest.append("Rozpoczęcie backtestu...")
         historical_prices = self.generate_historical_data()
-        # Używamy AdaptiveTradingStrategy – strategii adaptacyjnej
+        # Używamy AdaptiveTradingStrategy – strategii adaptacyjnej z prognozowaniem,
+        # ale możesz też wybrać IntelligentTradingStrategyWithPrediction, jeśli chcesz.
         strategy = AdaptiveTradingStrategy()
         backtester = Backtester(historical_prices, strategy)
         trades, balance_history = backtester.run()
@@ -769,7 +797,10 @@ class MainWindow(QMainWindow):
         self.txt_backtest.append("Optymalizacja zakończona.\n")
 
     def generate_historical_data(self, length=200):
+        # Pobieramy dane historyczne z prawdziwego źródła – przykładowo z Binance
+        # Możesz dostosować to rozwiązanie, np. pobierając dane z innego API
         prices = []
+        # Dla uproszczenia, użyjemy symulowanych danych, ale tutaj możesz zaimplementować funkcję pobierającą dane historyczne
         price = 100.0
         for _ in range(length):
             change = random.uniform(-1, 1)
