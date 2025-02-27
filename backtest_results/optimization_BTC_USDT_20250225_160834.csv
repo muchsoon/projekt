@@ -1,0 +1,2 @@
+SMA_short_window,SMA_long_window,EMA_short_window,EMA_long_window,RSI_low,RSI_high,STOCH_low,STOCH_high,stop_loss,take_profit,profit
+30,150,10,24,25,65,20,70,0.05,0.1,-20489583.55599996

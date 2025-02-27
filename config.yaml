@@ -1,0 +1,17 @@
+api_key: "pftKxawF82yoK4NT7jB4N0kXA6x9MeGD1pyDRjUEPhbv0vnoSwtJp8z2T9Jrl5P2"
+api_secret: "c9HTbNwQnsKK3462f7G14AzjQdhGSVKqwDyQbgQ5bM8nXWNTFCMhjS4SoYLN86z7"
+symbol: "BTC/USDT"
+initial_capital: 10000
+position_size: 0.1
+strategy_params:
+  sma_short_length: 50
+  sma_long_length: 200
+  threshold: 0.4
+  rsi_low: 30
+  rsi_high: 70
+  stop_loss: 0.05
+  take_profit: 0.1
+active_strategies:
+  - SMA
+  - RSI
+  - MACD
